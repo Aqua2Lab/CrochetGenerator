@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Crochet Auto Pattern Maker (Mobile + Feedback)</title>
+  <title>Crochet Auto Pattern Maker (Mobile + Instructions)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
@@ -48,6 +48,15 @@
       white-space: pre-wrap; font-family: monospace;
       overflow-y: auto; font-size: 0.9em;
     }
+    #instructions {
+      background: #fff3cd;
+      border: 1px solid #ffeeba;
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 0.85em;
+      line-height: 1.4em;
+    }
     button {
       margin: 5px 5px 5px 0; padding: 10px 14px;
       border: none; border-radius: 6px;
@@ -79,6 +88,17 @@
     <h1>🧵 Crochet Pattern Output</h1>
     <div id="output">Draw or upload an image → pattern will appear here...</div>
     <button id="feedbackBtn" onclick="sendFeedback()">📧 Send Feedback</button>
+
+    <!-- Instructions -->
+    <div id="instructions">
+      <strong>ℹ️ How to Use:</strong><br><br>
+      • Select a <b>color</b> from the palette.<br>
+      • Choose a tool: ✏️ Draw, 🪣 Fill, 🔄 Erase, 📄 Generate.<br>
+      • Draw directly on the grid OR upload an image.<br>
+      • Generated crochet instructions will appear on the left.<br><br>
+      ⚠️ <b>Important:</b> Only upload images <u>without backgrounds</u> (transparent PNGs).  
+      If the image has a background, the app may include it in the pattern.
+    </div>
   </div>
 
   <!-- Right Panel -->
@@ -274,7 +294,7 @@
       return nearestName;
     }
 
-    // Upload image
+    // Upload image with background removal
     function loadImage(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -285,15 +305,34 @@
         const ctx = canvas.getContext("2d");
         ctx.drawImage(img, 0, 0, cols, rows);
         const data = ctx.getImageData(0, 0, cols, rows).data;
+
+        // detect background from corners
+        const corners = [
+          {r: data[0], g: data[1], b: data[2]},
+          {r: data[(cols-1)*4], g: data[(cols-1)*4+1], b: data[(cols-1)*4+2]},
+          {r: data[(rows-1)*cols*4], g: data[(rows-1)*cols*4+1], b: data[(rows-1)*cols*4+2]},
+          {r: data[(rows*cols-1)*4], g: data[(rows*cols-1)*4+1], b: data[(rows*cols-1)*4+2]}
+        ];
+        const bg = {
+          r: Math.round((corners[0].r+corners[1].r+corners[2].r+corners[3].r)/4),
+          g: Math.round((corners[0].g+corners[1].g+corners[2].g+corners[3].g)/4),
+          b: Math.round((corners[0].b+corners[1].b+corners[2].b+corners[3].b)/4)
+        };
+
         clearAll();
         for (let r = 0; r < rows; r++) {
           for (let c = 0; c < cols; c++) {
             const idx = (r*cols+c)*4;
             const red = data[idx], green = data[idx+1], blue = data[idx+2];
-            const color = `rgb(${red},${green},${blue})`;
-            const cell = grid.children[r*cols + c];
-            cell.style.background = color;
-            drawing[`${r},${c}`] = color;
+            const dist = Math.sqrt(
+              Math.pow(red-bg.r,2)+Math.pow(green-bg.g,2)+Math.pow(blue-bg.b,2)
+            );
+            if (dist > 40) { // threshold
+              const color = `rgb(${red},${green},${blue})`;
+              const cell = grid.children[r*cols + c];
+              cell.style.background = color;
+              drawing[`${r},${c}`] = color;
+            }
           }
         }
         generatePattern();
