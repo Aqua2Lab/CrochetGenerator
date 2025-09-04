@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Crochet Auto Pattern Maker (Mobile)</title>
+  <title>Crochet Auto Pattern Maker (Mobile + Feedback)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
@@ -39,17 +39,14 @@
       user-select: none;
       touch-action: none;
     }
-    .cell {
-      background: white; cursor: crosshair;
-    }
+    .cell { background: white; cursor: crosshair; }
     #output {
       flex: 1;
       padding: 10px;
       background: #fff; border-radius: 10px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.2);
       white-space: pre-wrap; font-family: monospace;
-      overflow-y: auto;
-      font-size: 0.9em;
+      overflow-y: auto; font-size: 0.9em;
     }
     button {
       margin: 5px 5px 5px 0; padding: 10px 14px;
@@ -58,21 +55,15 @@
       font-size: 0.9em;
     }
     input[type=file] { margin: 10px 0; font-size: 0.9em; }
-
-    /* Mobile adjustments */
+    #feedbackBtn {
+      background: #d6336c;
+      margin-top: 10px;
+    }
     @media (max-width: 768px) {
-      body {
-        flex-direction: column;
-      }
-      #grid {
-        grid-template-columns: repeat(20, 1fr); /* reduce columns for readability */
-      }
-      .colorBtn {
-        width: 32px; height: 32px;
-      }
-      button {
-        flex: 1;
-      }
+      body { flex-direction: column; }
+      #grid { grid-template-columns: repeat(20, 1fr); }
+      .colorBtn { width: 32px; height: 32px; }
+      button { flex: 1; }
       #toolbar {
         position: sticky; top: 0;
         background: #ffecd2;
@@ -87,6 +78,7 @@
   <div id="leftPanel">
     <h1>🧵 Crochet Pattern Output</h1>
     <div id="output">Draw or upload an image → pattern will appear here...</div>
+    <button id="feedbackBtn" onclick="sendFeedback()">📧 Send Feedback</button>
   </div>
 
   <!-- Right Panel -->
@@ -112,7 +104,7 @@
     let isDrawing = false;
     const drawing = {};
 
-    // Known yarn colors
+    // Yarn colors
     const namedColors = {
       "Black": "#000000",
       "Red": "#FF0000",
@@ -206,7 +198,7 @@
       output.textContent = "Cleared. Draw again or upload an image.";
     }
 
-    // Generate pattern
+    // Generate pattern with grouped counts + color names
     function generatePattern() {
       let pattern = "Generated Crochet Pattern:\n\n";
       for (let r = 0; r < rows; r++) {
@@ -307,6 +299,11 @@
         generatePattern();
       };
       img.src = URL.createObjectURL(file);
+    }
+
+    // Feedback button
+    function sendFeedback() {
+      window.location.href = "mailto:emailishikashah@gmail.com?subject=Crochet Pattern Maker Feedback&body=Hi Ishika,%0D%0A%0D%0AMy feedback is:";
     }
   </script>
 </body>
