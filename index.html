@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Crochet Auto Pattern Maker (Mobile)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      margin: 0;
+      background: linear-gradient(135deg, #ffecd2, #fcb69f);
+      height: 100vh;
+      display: flex;
+      flex-direction: row;
+    }
+    #leftPanel, #rightPanel {
+      flex: 1;
+      padding: 15px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+    }
+    h1 { margin: 10px 0; color: #333; font-size: 1.2em; }
+    #palette {
+      display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;
+    }
+    .colorBtn {
+      width: 28px; height: 28px; border-radius: 6px;
+      cursor: pointer; border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+    #grid {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(30, 1fr);
+      grid-auto-rows: minmax(15px, 2vw);
+      gap: 1px;
+      background: #aaa;
+      user-select: none;
+      touch-action: none;
+    }
+    .cell {
+      background: white; cursor: crosshair;
+    }
+    #output {
+      flex: 1;
+      padding: 10px;
+      background: #fff; border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      white-space: pre-wrap; font-family: monospace;
+      overflow-y: auto;
+      font-size: 0.9em;
+    }
+    button {
+      margin: 5px 5px 5px 0; padding: 10px 14px;
+      border: none; border-radius: 6px;
+      background: #333; color: #fff; cursor: pointer;
+      font-size: 0.9em;
+    }
+    input[type=file] { margin: 10px 0; font-size: 0.9em; }
+
+    /* Mobile adjustments */
+    @media (max-width: 768px) {
+      body {
+        flex-direction: column;
+      }
+      #grid {
+        grid-template-columns: repeat(20, 1fr); /* reduce columns for readability */
+      }
+      .colorBtn {
+        width: 32px; height: 32px;
+      }
+      button {
+        flex: 1;
+      }
+      #toolbar {
+        position: sticky; top: 0;
+        background: #ffecd2;
+        padding: 5px 0;
+        z-index: 10;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Left Panel -->
+  <div id="leftPanel">
+    <h1>🧵 Crochet Pattern Output</h1>
+    <div id="output">Draw or upload an image → pattern will appear here...</div>
+  </div>
+
+  <!-- Right Panel -->
+  <div id="rightPanel">
+    <h1>🎨 Drawing Grid</h1>
+    <div id="palette"></div>
+    <div id="toolbar">
+      <button onclick="setTool('draw')">✏️ Draw</button>
+      <button onclick="setTool('fill')">🪣 Fill</button>
+      <button onclick="clearAll()">🔄 Erase All</button>
+      <button onclick="generatePattern()">📄 Generate</button>
+    </div>
+    <input type="file" id="imgUpload" accept="image/*" onchange="loadImage(event)">
+    <div id="grid"></div>
+  </div>
+
+  <script>
+    const grid = document.getElementById("grid");
+    const output = document.getElementById("output");
+    const palette = document.getElementById("palette");
+    let currentColor = "#000";
+    let currentTool = "draw";
+    let isDrawing = false;
+    const drawing = {};
+
+    // Known yarn colors
+    const namedColors = {
+      "Black": "#000000",
+      "Red": "#FF0000",
+      "Blue": "#0000FF",
+      "Yellow": "#FFFF00",
+      "Green": "#008000",
+      "Purple": "#800080",
+      "Orange": "#FFA500",
+      "Pink": "#FFC0CB",
+      "White": "#FFFFFF",
+      "Gray": "#808080",
+      "Brown": "#8B4513",
+      "Beige": "#F5F5DC",
+      "Tan": "#D2B48C"
+    };
+
+    const paletteColors = ["#000000","#FF0000","#0000FF","#FFFF00","#008000","#800080","#FFA500","#FFC0CB","#FFFFFF"];
+    paletteColors.forEach(color => {
+      const btn = document.createElement("div");
+      btn.className = "colorBtn";
+      btn.style.background = color;
+      btn.title = getNearestColorName(hexToRgbObj(color));
+      btn.onclick = () => currentColor = color;
+      palette.appendChild(btn);
+    });
+
+    // Create grid
+    const rows = 30, cols = 30;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cell = document.createElement("div");
+        cell.classList.add("cell");
+        cell.dataset.row = r;
+        cell.dataset.col = c;
+
+        cell.addEventListener("mousedown", () => {
+          if (currentTool === "draw") { isDrawing = true; draw(cell, r, c); }
+          else if (currentTool === "fill") { fill(cell, r, c); }
+        });
+        cell.addEventListener("mouseover", () => { if (isDrawing && currentTool === "draw") draw(cell, r, c); });
+
+        // Touch support
+        cell.addEventListener("touchstart", e => { e.preventDefault(); if (currentTool === "draw") draw(cell, r, c); });
+        cell.addEventListener("touchmove", e => {
+          e.preventDefault();
+          const touch = e.touches[0];
+          const target = document.elementFromPoint(touch.clientX, touch.clientY);
+          if (target && target.classList.contains("cell") && currentTool === "draw") {
+            draw(target, target.dataset.row, target.dataset.col);
+          }
+        });
+
+        grid.appendChild(cell);
+      }
+    }
+
+    document.body.addEventListener("mouseup", () => isDrawing = false);
+    document.body.addEventListener("touchend", () => isDrawing = false);
+
+    function setTool(tool) { currentTool = tool; }
+
+    function draw(cell, r, c) {
+      const key = `${r},${c}`;
+      cell.style.background = currentColor;
+      drawing[key] = currentColor;
+    }
+
+    // Flood fill
+    function fill(startCell, r, c) {
+      const targetColor = rgbToHex(startCell.style.background || "white");
+      if (targetColor === currentColor) return;
+      const stack = [[r, c]];
+      while (stack.length) {
+        const [row, col] = stack.pop();
+        if (row < 0 || col < 0 || row >= rows || col >= cols) continue;
+        const key = `${row},${col}`;
+        const cell = grid.children[row*cols + col];
+        if (!cell) continue;
+        const cellColor = rgbToHex(cell.style.background || "white");
+        if (cellColor === targetColor) {
+          cell.style.background = currentColor;
+          drawing[key] = currentColor;
+          stack.push([row-1,col],[row+1,col],[row,col-1],[row,col+1]);
+        }
+      }
+    }
+
+    function clearAll() {
+      document.querySelectorAll(".cell").forEach(cell => cell.style.background = "white");
+      for (const k in drawing) delete drawing[k];
+      output.textContent = "Cleared. Draw again or upload an image.";
+    }
+
+    // Generate pattern
+    function generatePattern() {
+      let pattern = "Generated Crochet Pattern:\n\n";
+      for (let r = 0; r < rows; r++) {
+        let rowPattern = [];
+        let lastStitch = null, lastColor = null, count = 0;
+
+        for (let c = 0; c < cols; c++) {
+          const key = `${r},${c}`;
+          if (drawing[key]) {
+            const rgb = hexToRgbObj(drawing[key]);
+            const brightness = (rgb.r+rgb.g+rgb.b)/3;
+
+            let stitch = "sc";
+            if (brightness < 85) stitch = "dc";
+            else if (brightness < 170) stitch = "hdc";
+            else stitch = "ch";
+
+            const colorName = getNearestColorName(rgb);
+
+            if (stitch === lastStitch && colorName === lastColor) {
+              count++;
+            } else {
+              if (lastStitch) rowPattern.push(`${lastStitch} X${count} [${lastColor}]`);
+              lastStitch = stitch;
+              lastColor = colorName;
+              count = 1;
+            }
+          }
+        }
+        if (lastStitch) rowPattern.push(`${lastStitch} X${count} [${lastColor}]`);
+
+        pattern += rowPattern.length > 0 ? `Row ${r+1}: ${rowPattern.join(", ")}\n` : `Row ${r+1}: (empty)\n`;
+      }
+      output.textContent = pattern;
+    }
+
+    // --- Color helpers ---
+    function hexToRgbObj(hex) {
+      if (hex.startsWith("rgb")) {
+        const parts = hex.match(/\d+/g);
+        return {r:+parts[0], g:+parts[1], b:+parts[2]};
+      }
+      const bigint = parseInt(hex.slice(1), 16);
+      return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+    }
+
+    function rgbToHex(rgb) {
+      if (!rgb) return "#FFFFFF";
+      if (rgb.startsWith("#")) return rgb.toUpperCase();
+      const parts = rgb.match(/\d+/g);
+      if (!parts) return "#FFFFFF";
+      const r = parseInt(parts[0]).toString(16).padStart(2, "0");
+      const g = parseInt(parts[1]).toString(16).padStart(2, "0");
+      const b = parseInt(parts[2]).toString(16).padStart(2, "0");
+      return ("#" + r + g + b).toUpperCase();
+    }
+
+    function getNearestColorName(rgb) {
+      let nearestName = "Unknown";
+      let minDist = Infinity;
+      for (const [name, hex] of Object.entries(namedColors)) {
+        const nc = hexToRgbObj(hex);
+        const dist = Math.sqrt(
+          Math.pow(rgb.r - nc.r, 2) +
+          Math.pow(rgb.g - nc.g, 2) +
+          Math.pow(rgb.b - nc.b, 2)
+        );
+        if (dist < minDist) {
+          minDist = dist;
+          nearestName = name;
+        }
+      }
+      return nearestName;
+    }
+
+    // Upload image
+    function loadImage(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = cols; canvas.height = rows;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, cols, rows);
+        const data = ctx.getImageData(0, 0, cols, rows).data;
+        clearAll();
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const idx = (r*cols+c)*4;
+            const red = data[idx], green = data[idx+1], blue = data[idx+2];
+            const color = `rgb(${red},${green},${blue})`;
+            const cell = grid.children[r*cols + c];
+            cell.style.background = color;
+            drawing[`${r},${c}`] = color;
+          }
+        }
+        generatePattern();
+      };
+      img.src = URL.createObjectURL(file);
+    }
+  </script>
+</body>
+</html>
